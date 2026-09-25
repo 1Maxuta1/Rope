@@ -19,6 +19,8 @@ public class Rope : MonoBehaviour
                 anchorTop.position + Vector3.down * (0.5f * (i + 1)),
                 Quaternion.identity
             );
+            RopeSegment ropeSegment = segment.AddComponent<RopeSegment>();
+            ropeSegment.segmentNumber = i + 1;
 
             HingeJoint joint = segment.AddComponent<HingeJoint>();
             joint.anchor = new Vector3(0, 0.5f, 0);
@@ -28,4 +30,3 @@ public class Rope : MonoBehaviour
         }
     }
 }
-//fw
