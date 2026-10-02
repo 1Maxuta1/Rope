@@ -13,7 +13,7 @@ public class CameraController : MonoBehaviour
     public void OnLook(InputAction.CallbackContext context)
     {
       lookInput = context.ReadValue<Vector2>();
-        Debug.Log("Look: " + lookInput);
+        //Debug.Log("Look: " + lookInput);
 
         yaw += lookInput.x * mouseSensitivity;
         pitch -= lookInput.y * mouseSensitivity;
