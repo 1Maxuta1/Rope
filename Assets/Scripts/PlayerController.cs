@@ -4,12 +4,23 @@ using UnityEngine.InputSystem;
 public class PlayerController : MonoBehaviour
 {
     private Rigidbody rb;
-   private Vector2 moveInput;
+    private Vector2 moveInput;
+    private bool isGrounded;
+    [SerializeField] private float jumpForce = 5f;
 
     public void OnMove(InputAction.CallbackContext context)
     {
         moveInput = context.ReadValue<Vector2>();
-        Debug.Log("Move: " + moveInput);
+        //Debug.Log("Move: " + moveInput);
+    }
+
+    public void OnJump(InputAction.CallbackContext context)
+    {
+        if (context.performed && isGrounded)
+        {
+            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            Debug.Log("Jump!");
+        }
     }
 
     private void Awake()
@@ -40,10 +51,10 @@ public class PlayerController : MonoBehaviour
                     );
         }
 
+        isGrounded = Physics.Raycast(transform.position, Vector3.down, 1f);
+        
     }
 
-  
-       
 
     }
 
