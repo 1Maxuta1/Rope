@@ -7,6 +7,13 @@ public class PlayerController : MonoBehaviour
     private Rigidbody rb;
     private Vector2 moveInput;
     private bool isGrounded;
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private float groundCheckRadius = 0.2f;
+    [SerializeField] private LayerMask groundLayer;
+
+
+    [SerializeField] private Animator animator;
+    [SerializeField] private Transform cameraTransform;
 
     [SerializeField] private float jumpForce = 5f;
 
@@ -17,6 +24,7 @@ public class PlayerController : MonoBehaviour
 
     [SerializeField] private Transform leftHandVisual;
     [SerializeField] private Transform rightHandVisual;
+
 
 
     [SerializeField] private float handMoveSpeed = 5f;
@@ -70,18 +78,29 @@ public class PlayerController : MonoBehaviour
             targetPosition,
             handMoveSpeed * Time.deltaTime
         );
+        animator.SetFloat("Speed", moveInput.magnitude);
     }
 
     private void FixedUpdate()
     {
         
-        Vector3 movement = new Vector3(moveInput.x, 0, moveInput.y);
+        Vector3 forward = cameraTransform.forward;
+        Vector3 right = cameraTransform.right;
+
+        forward.y = 0f;
+        right.y = 0f;
+
+        forward.Normalize();
+        right.Normalize();
+
+        Vector3 movement = forward * moveInput.y + right * moveInput.x;
 
         rb.linearVelocity = new Vector3(
             movement.x,
             rb.linearVelocity.y,
             movement.z
             );
+
 
         if (movement != Vector3.zero)
         {
@@ -95,8 +114,12 @@ public class PlayerController : MonoBehaviour
                     );
         }
 
-        isGrounded = Physics.Raycast(transform.position, Vector3.down, 1f);
-        
+        isGrounded = Physics.CheckSphere(
+     groundCheck.position,
+     groundCheckRadius,
+     groundLayer
+ );
+
     }
 
     public void OnGrabLeft (InputAction.CallbackContext context)
