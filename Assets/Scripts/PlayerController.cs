@@ -1,4 +1,3 @@
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -16,28 +15,25 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private Transform cameraTransform;
 
     [SerializeField] private float jumpForce = 5f;
+    [SerializeField] private float acceleration = 12f;
 
     [SerializeField] private Transform leftHand;
     [SerializeField] private Transform rightHand;
     [SerializeField] private float grabDistance = 1f;
     [SerializeField] private float grabRadius = 0.5f;
 
-    [SerializeField] private Transform leftHandVisual;
-    [SerializeField] private Transform rightHandVisual;
+    [SerializeField] private FingerCurlController leftFingerCurl;
+    [SerializeField] private FingerCurlController rightFingerCurl;
 
+    [SerializeField] private Transform leftGrabPoint;
+    [SerializeField] private Transform rightGrabPoint;
 
-
-    [SerializeField] private float handMoveSpeed = 5f;
-    [SerializeField] private float handForwardDistance = 1f;
-    [SerializeField] private float handUpDistance = 1f;
-
-    private bool isLeftHandRaised;
     private FixedJoint leftHandJoint;
-    private Vector3 leftHandStartPosition;
-
-    private bool isRightHandRaised;
     private FixedJoint rightHandJoint;
-    private Vector3 rightHandStartPosition;
+
+
+    private bool leftGrabHeld;
+    private bool rightGrabHeld;
 
 
     public void OnMove(InputAction.CallbackContext context)
@@ -58,27 +54,17 @@ public class PlayerController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-
-        leftHandStartPosition = leftHand.localPosition;
-        rightHandStartPosition = rightHand.localPosition;
     }
 
     private void Update()
     {
-        Vector3 targetPosition = leftHandStartPosition;
-
-        if (isLeftHandRaised)
-        {
-            targetPosition += Vector3.forward * handForwardDistance;
-            targetPosition += Vector3.up * handUpDistance;
-        }
-
-        leftHand.localPosition = Vector3.MoveTowards(
-            leftHand.localPosition,
-            targetPosition,
-            handMoveSpeed * Time.deltaTime
-        );
         animator.SetFloat("Speed", moveInput.magnitude);
+
+        if (leftGrabHeld && leftHandJoint == null)
+            TryGrabHand(leftHand, ref leftHandJoint, "Left");
+
+        if (rightGrabHeld && rightHandJoint == null)
+            TryGrabHand(rightHand, ref rightHandJoint, "Right");
     }
 
     private void FixedUpdate()
@@ -95,11 +81,25 @@ public class PlayerController : MonoBehaviour
 
         Vector3 movement = forward * moveInput.y + right * moveInput.x;
 
+        Vector3 targetVelocity = movement;
+
+        Vector3 currentHorizontalVelocity = new Vector3(
+            rb.linearVelocity.x,
+            0f,
+            rb.linearVelocity.z
+        );
+
+        Vector3 newHorizontalVelocity = Vector3.MoveTowards(
+            currentHorizontalVelocity,
+            targetVelocity,
+            acceleration * Time.fixedDeltaTime
+        );
+
         rb.linearVelocity = new Vector3(
-            movement.x,
+            newHorizontalVelocity.x,
             rb.linearVelocity.y,
-            movement.z
-            );
+            newHorizontalVelocity.z
+        );
 
 
         if (movement != Vector3.zero)
@@ -122,89 +122,136 @@ public class PlayerController : MonoBehaviour
 
     }
 
-    public void OnGrabLeft (InputAction.CallbackContext context)
+    private void OnDrawGizmos()
     {
-        if (context.performed)
-        {      
-            isLeftHandRaised = true;
-            Debug.Log("Left Hand UP!");
+        if (leftGrabPoint != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(
+                leftGrabPoint.position,
+                grabRadius
+            );
 
-            Collider[] hits = Physics.OverlapSphere(
-           leftHand.position,
-           grabRadius
-       );
-            if (context.canceled)
-            {
-                isLeftHandRaised = false;
+            Gizmos.DrawSphere(
+                leftGrabPoint.position,
+                0.04f
+            );
+        }
 
-                Debug.Log("Left Hand DOWN!");
-            }
+        if (rightGrabPoint != null)
+        {
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(
+                rightGrabPoint.position,
+                grabRadius
+            );
 
-            Debug.Log("Left Hand searching for rope!");
-
-            foreach (Collider hit in hits)
-            {
-                RopeSegment rope = hit.GetComponent<RopeSegment>();
-
-                if (rope != null)
-                {
-                    //leftHandJoint = leftHand.gameObject.AddComponent<FixedJoint>();
-
-                    //leftHandJoint.connectedBody = rope.GetComponent<Rigidbody>();
-                    Debug.Log("Left hand found rope segment: " + rope.segmentNumber);
-                    break;
-                }
-            }
-
+            Gizmos.DrawSphere(
+                rightGrabPoint.position,
+                0.04f
+            );
         }
     }
 
-    private void OnDrawGizmos()
+    private void ReleaseHand(ref FixedJoint handJoint, string handName)
     {
-        if (leftHand == null)
+        if (handJoint == null)
             return;
-      
-        Gizmos.color = Color.red;
 
-        Gizmos.DrawWireSphere(
-            leftHand.position,
-            grabRadius
-        );
+        Destroy(handJoint);
+        handJoint = null;
 
+        if (handName == "Left" && leftFingerCurl != null)
+            leftFingerCurl.SetGrabbing(false);
 
-        if (rightHand != null)
+        if (handName == "Right" && rightFingerCurl != null)
+            rightFingerCurl.SetGrabbing(false);
+
+        Debug.Log(handName + " hand released.");
+    }
+
+    private void StopSpinIfDetached()
+    {
+        if (leftHandJoint == null && rightHandJoint == null)
         {
-            Gizmos.color = Color.blue;
+            rb.angularVelocity = Vector3.zero;
+        }
+    }
 
-            Gizmos.DrawWireSphere(
-                rightHand.position,
-                grabRadius
-            );
+    public void OnGrabLeft(InputAction.CallbackContext context)
+    {
+        if (context.performed)
+            leftGrabHeld = true;
+
+        if (context.canceled)
+        {
+            leftGrabHeld = false;
+            ReleaseHand(ref leftHandJoint, "Left");
+            StopSpinIfDetached();
         }
     }
 
     public void OnGrabRight(InputAction.CallbackContext context)
     {
         if (context.performed)
-            if (context.performed)
-            {
-                Collider[] hits = Physics.OverlapSphere(
-                    rightHand.position,
-                    grabRadius
-                );
-                Debug.Log("Right Hand searching for rope!");
-                foreach (Collider hit in hits)
-                {
-                    RopeSegment rope = hit.GetComponent<RopeSegment>();
+            rightGrabHeld = true;
 
-                    if (rope != null)
-                    {
-                        Debug.Log("Right hand found rope segment: " + rope.segmentNumber);
-                        break;
-                    }
-                }
-            }
+        if (context.canceled)
+        {
+            rightGrabHeld = false;
+            ReleaseHand(ref rightHandJoint, "Right");
+            StopSpinIfDetached();
+        }
     }
+
+    private void TryGrabHand(
+    Transform hand,
+    ref FixedJoint handJoint,
+    string handName)
+    {
+        if (hand == null || handJoint != null)
+            return;
+
+        Collider[] hits = Physics.OverlapSphere(
+            hand.position,
+            grabRadius
+        );
+
+        foreach (Collider hit in hits)
+        {
+            RopeSegment rope = hit.GetComponentInParent<RopeSegment>();
+
+            if (rope == null)
+                continue;
+
+            Rigidbody ropeBody = rope.GetComponent<Rigidbody>();
+
+            if (ropeBody == null)
+                continue;
+
+            handJoint = gameObject.AddComponent<FixedJoint>();
+            handJoint.autoConfigureConnectedAnchor = false;
+            handJoint.connectedBody = ropeBody;
+
+            handJoint.anchor = transform.InverseTransformPoint(
+                hand.position
+            );
+
+            handJoint.connectedAnchor = ropeBody.transform.InverseTransformPoint(
+                hand.position
+            );
+
+            handJoint.enableCollision = false;
+
+            Debug.Log(handName + " hand grabbed rope segment: " + rope.segmentNumber);
+            return;
+        }
+
+        Debug.Log(handName + " hand found no rope.");
+    }
+
+   
+
 }
 
 
