@@ -23,6 +23,7 @@ public class Rope : MonoBehaviour
             ropeSegment.segmentNumber = i + 1;
 
             HingeJoint joint = segment.AddComponent<HingeJoint>();
+            joint.enableCollision = false;
             joint.anchor = new Vector3(0, 0.5f, 0);
             joint.connectedBody = previousBody;
 
